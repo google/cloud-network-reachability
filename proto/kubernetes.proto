@@ -1,0 +1,66 @@
+// Copyright 2020 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+/* Kubernetes and GKE message definitions.
+ *
+ * This module defines messages specifically related with Kubernets and GKE.
+ * The GCE native messages are still in cloud_network_model.proto, such as
+ * instances, load balancers.
+ */
+
+syntax = "proto2";
+
+package google.cloud.network.reachability;
+
+import "proto/rules.proto";
+
+// GKE cluster general configurations, including master.
+message GKECluster {
+  // GKE cluster resource id.
+  optional string id = 1;
+  // GKE cluster name, prefixed with project name.
+  optional string name = 2;
+  // GKE cluster self-link.
+  optional string uri = 3;
+
+  // Private IP of the GKE master if any.
+  optional uint32 master_private_ip = 4;
+  // Public IP of the GKE master if any.
+  optional uint32 master_public_ip = 5;
+
+  optional bool vpc_native = 6;
+  // Uri of the network this cluster is in.
+  optional string network = 7;
+  // Uri of the subnet this cluster is in.
+  optional string subnet = 8;
+  // Whether private cluster is enabled.
+  // All the nodes in private cluster only have internal IP address. Master
+  // is only accessible by private IP.
+  optional bool private_cluster = 9;
+  // Is master authorized network enabled?
+  // This is applicable for both public and private endpoint of a master.
+  optional bool enable_master_authorized_network = 10;
+  // All the ranges that are authorized for master access.
+  repeated Ipv4Range authorized_ranges = 11;
+  // Authorized ranges only applicable to private master endpoint.
+  repeated Ipv4Range private_authorized_ranges = 12;
+  // Pod IP range.
+  optional Ipv4Range pod_range = 13;
+  // Service IP range.
+  optional Ipv4Range service_range = 14;
+  // Whether private endpoint is enabled.
+  optional bool enable_private_endpoint = 15;
+  // Whether private cluster is enabled.
+  optional bool enable_private_nodes = 16;
+}

@@ -1,0 +1,339 @@
+// Copyright 2020 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+/* Forwarding and firewall rules.
+ *
+ *  This module defines forwarding and firewall rules at a level of
+ *  abstraction suitable for reachability analysis.
+ */
+
+syntax = "proto2";
+
+package google.cloud.network.reachability;
+
+// ProtoBestPractices.ignore_findings = "enum_default_value"
+
+/*******************************************************************************
+ * FORWARDING RULES
+ *******************************************************************************/
+
+/* Routes are a very restricted form of forwarding rule. They forward packets
+ * deterministically based only on destination IP address, using longest
+ * prefix match, then priority, then a hash function to brake ties.
+ */
+// Next id: 24
+message Route {
+  // An arbitrary but unique ID for the resource.
+  optional string id = 1;
+
+  // Has no semantics, but is convenient to have around.
+  optional string name = 2;
+
+  // Uri of the route.
+  optional string uri = 13;
+
+  // Priorities are in [0,2^16). 0 is the highest priority, 2^16 - 1 the lowest.
+  required uint32 priority = 3;
+
+  // Rule applies to packets with destination IPs in this range.
+  required Ipv4Range dest_range = 4;
+
+  oneof nextHop {
+    // Internal IP address within the current network.
+    uint32 next_hop_ip = 5;
+
+    // The network knows how to route all IPs in its address space.
+    string next_hop_network = 6;
+    Gateway next_hop_gateway = 7;
+    string next_hop_tunnel = 9;
+    string next_hop_peering = 10;
+    // If next hop is invalid, string contains the reason why it is invalid.
+    string next_hop_blackhole = 11;
+    string next_hop_vpn_gateway = 14;
+    // Instance uri if next hop is an instance.
+    string next_hop_instance = 22;
+  }
+  enum Gateway {
+    // Knows how to route external IPs.
+    INTERNET_GATEWAY = 1;
+  }
+
+  // Rule applies at instances matching this filter.
+  required InstanceFilter instance_filter = 8;
+
+  // Rule applies to packets matching this filter.
+  optional PacketFilter packet_filter = 12;
+
+  optional string advertised_by_tunnel = 15;
+
+  // Type of routes.
+  enum RouteType {
+    // Unspecified type. Default value.
+    ROUTE_TYPE_UNSPECIFIED = 0;
+    // Route is a subnet route created by system automatically.
+    SUBNET = 1;
+    // Static route created by the user including default route to Internet.
+    STATIC = 2;
+    // Dynamic route exchanged between BGP peers.
+    DYNAMIC = 3;
+    // A subnet route received from peering network.
+    PEERING_SUBNET = 4;
+    // A static route received from peering network.
+    PEERING_STATIC = 5;
+    // A dynamic route received from peering network.
+    PEERING_DYNAMIC = 6;
+  }
+
+  // Type of route.
+  optional RouteType route_type = 16;
+
+  optional string next_hop_ip_network = 17;
+
+  optional int32 preference = 18;
+
+  // For dynamic route, the region of cloud router that learns the route.
+  optional string region = 19;
+
+  // For dynamic route imported by a peering VPC, the region of its next hop.
+  optional string next_hop_region = 20;
+
+  // For dynamic route, whether we learn this route from routers within the
+  // same region.
+  optional bool from_local = 21;
+
+  optional string next_hop_forwarding_rule = 23;
+}
+
+message Uint128 {
+  optional fixed64 high = 1;
+  optional fixed64 low = 2;  // required
+}
+
+/* Load Balancers implement more sophisticated forwarding rules that route
+ * packets nondeterministically at the HTTPS(s) or TCP / UDP level.
+ */
+// Next id: 20
+message ForwardingRule {
+  // An arbitrary but unique ID for the resource.
+  required string id = 1;
+
+  // Has no semantics, but it is convenient to have around.
+  optional string name = 2;
+
+  // Uri of the forwarding rule.
+  optional string uri = 13;
+
+  // VIP address that this forwarding rule applies to.
+  oneof address {
+    uint32 ip_address = 3;
+    Uint128 ipv6_address = 7;
+  }
+
+  // IP protocol that this forwarding rule applies to.
+  required IpProtocol ip_protocol = 4;
+
+  // Rule applies to packets with these destination ports.
+  repeated PortRange port_ranges = 5;
+
+  // List of instances that this forwarding rule points to. Used if forwarding
+  // rule points to an instance group
+  repeated string instances = 6;
+
+  // List of endpoints. Used if the forwarding rule points to a network endpoint
+  // group.
+  repeated NetworkEndpoint endpoints = 10;
+
+  // Name of the port indicated by the backend service. Used for external
+  // load balancing. It should be the same as the one mentioned by the instance.
+  optional string port_name = 8;
+
+  // Value of the port. This value is used only when the named port at
+  // InstanceGroup is not defined.
+  optional uint32 port_number = 11;
+
+  // Type of target of the forwarding rule.
+  required Target target = 9;
+  enum Target {
+    UNKNOWN = 0;
+    HTTP_PROXY = 1;
+    INSTANCE = 2;
+    POOL = 3;
+    SSL_PROXY = 4;
+    TCP_PROXY = 5;
+    VPN_GATEWAY = 6;
+    BACKEND_SERVICE = 7;  // Internal Load Balancing only
+  }
+
+  // If forwarding rule is for internal LB, the network field is set to be
+  // the network ID or URL where the internal VIP is allocated from.
+  optional string network = 12;
+
+  // The region of internal LB.
+  optional string region = 18;
+
+  // URL of the target resource.
+  optional string target_resource = 14;
+
+  // Health check uri for load balancer.
+  optional string health_check_uri = 16;
+
+  // Whether Global ILB access is allowed
+  optional bool allow_global_access = 19;
+
+  // Whether the backend instances of this forwarding rule is resolved.
+  // This is useful for incremental update.
+  optional bool resolved = 17;
+}
+
+/*******************************************************************************
+ * FIREWALL RULES
+ *******************************************************************************/
+
+message FirewallRule {
+  // An arbitrary but unique ID for the resource.
+  required string id = 1;
+
+  // Has no semantics, but is convenient to have around.
+  required string name = 2;
+
+  // Uri of the firewall rule.
+  optional string uri = 8;
+
+  // Priorities are in [0,2^16). 0 is the highest priority, 2^16 - 1 the lowest.
+  required uint32 priority = 3;
+
+  // A firewall rule may either deny matched packets or allow them. If several
+  // actions apply, deny overwrites allow.
+  required Action action = 4;
+  enum Action {
+    DENY = 1;
+    ALLOW = 2;
+  }
+
+  // Firewall rules can be applied when arriving at instances (INGRESS) or when
+  // departing from instances (EGRESS).
+  required Direction direction = 5;
+  enum Direction {
+    INGRESS = 1;
+    EGRESS = 2;
+  }
+
+  // Rule applies to packets matching this filter.
+  required PacketFilter packet_filter = 6;
+
+  // Rules applies at instances matching this filter.
+  required InstanceFilter instance_filter = 7;
+}
+
+/*******************************************************************************
+ * SHARED PRIMITIVES
+ *******************************************************************************/
+
+// A packet filter is attached to firewall and route rules to qualify to which
+// packets the rule applies.
+message PacketFilter {
+  // IPs and attributes are interpreted in the context of this network.
+  required string network = 1;
+
+  /* The rule applies to a packet IF, with Or binding tighter than AND, ... */
+
+  // Its "remote" IP address lies in any of these ranges
+  // (source IP if at INGRESS , destination IP if at EGRESS).
+  // Corresponds to soure_ranges @ INGRESS / destination_ranges @ EGRRESS in
+  // compute API v1.
+  repeated Ipv4Range ip_ranges = 2;
+
+  // Or, the instance associate with the above remote IP address has one of
+  // these attributes (tag or service accounts), where the IP |-> instance
+  // mapping is given by the network.
+  // Corresponds to source_tags + sourceServiceAccounts @ INGRESS in compute
+  // API v1. (No tag concept @ EGRESS.)
+  repeated Attribute attributes = 3;
+
+  // Or, neither ip_ranges nor attributes are specified (= wildcard).
+
+  /* AND */
+
+  // Its protocol and destination port lie in any of these ranges.
+  repeated ProtocolPortRange protocol_ranges = 4;
+
+  // Or, no protocol_ranges are specified (= wildcard).
+}
+
+// An instance filter is attached to rules and routes to qualify at which VMs
+// the rule will be applied.
+message InstanceFilter {
+  /* The filter matches an instances IF ... */
+
+  // The instance is connected to this network.
+  required string network = 1;
+
+  /* AND */
+
+  // The VM has any of the specified attributes, or this list is empty.
+  // Corresponds to targetTags + targetServiceAccounts in compute API v1.
+  repeated Attribute attributes = 2;
+
+  repeated Ipv4Range ip_ranges = 3;
+}
+
+message Attribute {
+  required string tag = 1;
+}
+
+message Ipv4Range {
+  required uint32 ip = 1;
+  optional uint32 mask = 2 [default = 32];
+}
+
+message ProtocolPortRange {
+  required IpProtocol protocol = 1;
+
+  // no port range specified = wildcard (all ports match)
+  optional PortRange port_range = 2;
+}
+
+// We use numbers as specified by the standard, see
+// go/wiki/List_of_IP_protocol_numbers. We only list supported protocols here.
+// This list may grow in the future.
+// Based on current cloud documentation below are the full supported list when
+// user specifies a new firewall rule.
+// https://cloud.google.com/vpc/docs/firewalls?hl=en_US&_ga= \
+//    2.32414654.-1218847922.1535407139#protocols_and_ports
+enum IpProtocol {
+  ICMP = 1;
+  TCP = 6;
+  UDP = 17;
+  XNSIDP = 22;
+  TRUNK = 23;
+  ESP = 50;
+  AH = 51;
+  ISOIP = 80;
+  IPIP = 94;
+  SCTP = 132;
+  UNKNOWN = 256;
+}
+
+// TCP & UDP port ranges, first port and last port are inclusive.
+message PortRange {
+  required uint32 first_port = 1;
+  required uint32 last_port = 2;
+}
+
+// A network endpoint
+message NetworkEndpoint {
+  required uint32 ip_address = 1;
+  required uint32 port = 2;
+  required string network = 3;
+}

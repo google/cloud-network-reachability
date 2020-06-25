@@ -1,0 +1,50 @@
+// Copyright 2020 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// Model errors. Minor model errors which will not abort analysis until
+// related configs are hit.
+syntax = "proto2";
+
+package goole.cloud.network.reachability;
+
+import "google/rpc/status.proto";
+
+enum ResourceType {
+  // Type not specified.
+  TYPE_UNSPECIFIED = 0;
+  NETWORK_ENDPOINT_GROUP = 1;
+  GKE_CONTAINER = 2;
+  ROUTER_STATUS = 3;
+  FIREWALL_RULE = 4;
+  IMPORTED_PEERING_ROUTES = 5;
+}
+
+// Failed to download some type of resource and thus configs are not available.
+message IngestionError {
+  optional ResourceType resource_type = 1;
+  optional google.rpc.Status status = 2;
+  // Uri of impacted resources.
+  repeated string impacted_resources = 3;
+}
+
+// Record resources that are failed to parse.
+message ParserError {
+  optional ResourceType resource_type = 1;
+
+  message FailedResource {
+    optional string resource_uri = 1;
+    optional string error_msg = 2;
+  }
+  repeated FailedResource resources = 2;
+}

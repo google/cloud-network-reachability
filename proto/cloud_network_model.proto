@@ -1,0 +1,498 @@
+// Copyright 2020 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto2";
+
+package google.cloud.network.reachability;
+
+import "proto/kubernetes.proto";
+import "proto/model_errors.proto";
+import "proto/rules.proto";
+import "google/protobuf/timestamp.proto";
+
+// Next id: 30
+message Model {
+  // Metadata of the project.
+  optional Metadata metadata = 22;
+  // A list of project IDs.
+  repeated string project_ids = 27;
+  // The organization id this project belongs to.
+  optional string org_id = 14;
+  repeated Network networks = 1;
+  repeated Subnet subnets = 2;
+  repeated Instance instances = 3;
+  repeated Route routes = 4;
+  repeated FirewallRule firewall_rules = 5;
+
+  // Reserved external addresses need not -- but can be -- included here.
+  // This serves two purposes:
+  // 1) Associate meta information (name, ID) with an address. This may make the
+  //    output of the analysis tool easier to interpret (e.g., "address xyz was
+  //    used here" vs "IP 32.10.0.10 was used here").
+  // 2) Mark an address without target as reserved. This allows the analysis
+  //    tool to give more accurate feedback (e.g., "address 32.10.0.10 has no
+  //    target" vs "address 32.10.0.10 unknown").
+  repeated ExternalAddress external_addresses = 6;
+  repeated ExternalIPv6Address external_v6_addresses = 10;
+
+  repeated ForwardingRule forwarding_rules = 7;
+  repeated InternalLBAddress ilb_addresses = 8;
+  repeated ExternalLBAddress elb_addresses = 9;
+  repeated ExternalLBIPv6Address elb_v6_addresses = 11;
+  repeated VPNGateway vpn_gateways = 15;
+  repeated VPNTunnel vpn_tunnels = 16;
+  repeated InstanceGroup instance_groups = 17;
+  repeated NetworkEndpointGroup network_endpoint_groups = 18;
+  repeated BackendService backend_services = 19;
+  repeated TargetPool target_pools = 20;
+  repeated GKECluster gke_clusters = 21;
+  repeated InterconnectAttachment interconnect_attachments = 23;
+  optional Errors errors = 24;
+  repeated HealthCheck health_checks = 25;
+  repeated TargetInstance target_instances = 26;
+  repeated UrlMap url_maps = 28;
+  repeated LoadBalancerProxies lb_proxies = 29;
+}
+
+message Metadata {
+  // The time of the last update message of the project.
+  optional google.protobuf.Timestamp last_update_time = 1;
+
+  // The time of the last query using the project.
+  optional google.protobuf.Timestamp last_query_time = 2;
+
+  // The time when the current snapshot of project is pulled.
+  optional google.protobuf.Timestamp last_full_snapshot_time = 3;
+
+  // The time taken to generate the model, in seconds.
+  optional int32 generation_latency = 4;
+}
+
+/*******************************************************************************
+ * VPC Networks
+ *******************************************************************************/
+message Network {
+  // An arbitrary but unique ID for the resource.
+  required string id = 1;
+
+  // Has no semantics, but is convenient to have around.
+  required string name = 2;
+
+  // Uri of the nerwork.
+  optional string uri = 6;
+
+  repeated string subnets = 3;
+
+  repeated NetworkPeer peers = 4;
+
+  enum RoutingMode {
+    UNKNOWN = 0;
+    GLOBAL = 1;
+    REGIONAL = 2;
+  }
+  required RoutingMode routing_mode = 5;
+
+  // All the regions this network has presence in. Including regions of all
+  // subnetworks and regions of all VPN gateways.
+  repeated string regions = 7;
+
+  // The regions where imported custom routes have been downloaded.
+  repeated string imported_routes_downloaded_regions = 8;
+}
+
+// Next id: 13
+message Subnet {
+  // An arbitrary but unique ID for the resource.
+  required string id = 1;
+
+  // Has no semantics, but is convenient to have around.
+  required string name = 2;
+
+  // Uri of the subnet.
+  optional string uri = 10;
+
+  // The id of the network that the subnet belongs to.
+  required string network = 3;
+
+  // The address space of this subnetwork.
+  required Ipv4Range ipv4_range = 4;
+
+  // Secondary IP ranges.
+  repeated Ipv4Range secondary_ranges = 6;
+
+  // Region for the subnet if available.
+  optional string region = 5;
+
+  // Does this subnet have private Google access?
+  optional bool private_google_access = 9;
+
+  // cloud nat for the subnet.
+  repeated CloudNat cloud_nats = 12;
+}
+
+message CloudNat {
+  // Ranges that are NAT'd.
+  repeated Ipv4Range nat_ranges = 1;
+  // Configured NAT IPs.
+  repeated uint32 nat_ips = 2;
+}
+
+message NetworkPeer {
+  // Name of the network peer, given by our customer.
+  required string name = 1;
+
+  // ID of the peered network.
+  required string peer_network = 3;
+
+  // States for Network Peering.
+  enum NetworkPeeringState {
+    UNKNOWN = 0;
+    // There is no matching configuration on the peer, including the case when
+    // peer does not exist.
+    INACTIVE = 1;
+    // Matching configuration exists on the peer.
+    ACTIVE = 2;
+  }
+
+  // [Output Only] State for the peering.
+  required NetworkPeeringState state = 4;
+
+  // Whether to import custom routes from the peered network
+  optional bool import_custom_routes = 5;
+
+  // Does the network export custom routes to peering network.
+  optional bool export_custom_routes = 6;
+}
+
+message InterconnectAttachment {
+  // Name of the interconnect attachment, given by our customer.
+  required string name = 1;
+
+  // ID of the interconnect attachment.
+  required string id = 2;
+
+  // Uri of the interconnect attachment.
+  required string uri = 3;
+
+  // The routes advertised to the interconnect attachment by BGP.
+  repeated Ipv4Range advertised_routes = 4;
+
+  // The region of the interconnect attachment.
+  optional string region = 5;
+}
+
+/*******************************************************************************
+ * HOST INSTANCES (VMs)
+ *******************************************************************************/
+message Instance {
+  // An arbitrary but unique ID for the resource.
+  optional string id = 1;
+
+  // Has no semantics, but is convenient to have around.
+  optional string name = 2;
+
+  // Uri of the instance.
+  optional string uri = 11;
+
+  optional string network = 3;
+  optional uint32 ip = 4;
+  repeated Attribute attributes = 5;
+  optional bool can_ip_forward = 6;
+  repeated NamedPort named_ports = 8;
+  repeated NetworkInterface nics = 10;
+  // The status of a VM, used to differentiate VM that is RUNNING or STOPPED.
+  optional string status = 12;
+  // Name of a region where the instance is configured.
+  optional string region = 13;
+}
+
+// Each interface must have internal IP, optional external IP, and IP alias.
+// Each interface must be in a different network as others, their ranges
+// cannot overlap.
+message NetworkInterface {
+  // name is usually like nic0, nic1, nic2 etc. Since the network interface is
+  // nested in message Instance, no need to prefix with project or VM name
+  // to make them unique.
+  optional string name = 1;
+  // Network ID.
+  optional string network = 2;
+  optional uint32 ip = 3;
+  optional uint32 external_ip = 4;
+  repeated Ipv4Range alias_ip_ranges = 5;
+}
+
+// A mapping from a port name to a port number.
+message NamedPort {
+  required string name = 1;
+  required uint32 number = 2;
+}
+
+/*******************************************************************************
+ * RESERVED IP ADDRESSES
+ *******************************************************************************/
+// External IPv4 addresses.
+message ExternalAddress {
+  // An arbitrary but unique ID for the resource.
+  required string id = 1;
+
+  // Has no semantics, but is convenient to have around.
+  required string name = 2;
+
+  // Uri of the external address.
+  optional string uri = 5;
+
+  // The external IPv4 address.
+  required uint32 ip = 3;
+
+  // The instance this address routes to.
+  optional string target = 4;
+}
+
+// External IPv6 addresses.
+message ExternalIPv6Address {
+  // An arbitrary but unique ID for the resource.
+  required string id = 1;
+
+  // Has no semantics, but is convenient to have around.
+  required string name = 2;
+
+  // Uri of the external IPv6 address.
+  optional string uri = 5;
+
+  // The external IPv6 address.
+  required Uint128 ip = 3;
+
+  // The instance this address routes to.
+  optional string target = 4;
+}
+
+// VIP for internal load balancers.
+message InternalLBAddress {
+  // ID of the forwarding rule attached.
+  required string id = 1;
+
+  // Name of the forwarding rule attached.
+  required string name = 2;
+
+  // Uri of the forwarding rule attached.
+  optional string uri = 6;
+
+  // The VIP address. For now, only support IPv4.
+  required uint32 vip = 3;
+
+  // The id of the Forwarding Rule used by the Load Balancer to which this
+  // address points.
+  required string forwarding_rule = 4;
+
+  // The network id where this ILB address is allocated from.
+  required string network = 5;
+}
+
+// IPv4 VIP for external load balancers.
+message ExternalLBAddress {
+  // ID of the forwarding rule attached.
+  required string id = 1;
+
+  // Name of the forwarding rule attached.
+  required string name = 2;
+
+  // Uri of the forwarding rule attached.
+  optional string uri = 5;
+
+  // The VIP address. It only support IPv4 address.
+  required uint32 vip = 3;
+
+  // The id of the Forwarding Rule used by the Load Balancer to which this
+  // address points.
+  required string forwarding_rule = 4;
+}
+
+// IPv6 VIP for external load balancers.
+message ExternalLBIPv6Address {
+  // ID of the forwarding rule attached.
+  required string id = 1;
+
+  // Name of the forwarding rule attached.
+  required string name = 2;
+
+  // Uri of the forwarding rule attached.
+  optional string uri = 5;
+
+  // The VIP address. It only support IPv6 address.
+  required Uint128 vip = 3;
+
+  // The id of the Forwarding Rule used by the Load Balancer to which this
+  // address points.
+  required string forwarding_rule = 4;
+}
+
+/*******************************************************************************
+ * VPN GATEWAYS AND TUNNELS
+ *******************************************************************************/
+// Next id: 7
+message VPNGateway {
+  // An arbitrary but unique ID for the resource.
+  optional string id = 1;
+
+  // Has no semantics, but is convenient to have around.
+  optional string name = 2;
+
+  // Uri of the VPN gateway.
+  optional string uri = 5;
+
+  // Uri of the network that this VPN gateway belongs to.
+  optional string network = 3;
+
+  // The IP addresses of the VPN gateway. Gateways of classic VPN have one IP
+  // address, and gateways of HA VPN has two IP addresses. It only supports IPv4
+  // addresses.
+  repeated uint32 ip = 4;
+
+  // Name of a GCP region where the VPN gateway is configured.
+  optional string region = 6;
+}
+
+// Next id: 12
+message VPNTunnel {
+  // Types of VPN routing policy. For more details see [Networks and Tunnel
+  // routing](/vpn/docs/concepts/choosing-networks-routing/).
+  enum RoutingType {
+    // Unspecified type. Default value.
+    ROUTING_TYPE_UNSPECIFIED = 0;
+    // Route based VPN.
+    ROUTE_BASED = 1;
+    // Policy based routing.
+    POLICY_BASED = 2;
+    // Dynamic (BGP) routing.
+    DYNAMIC = 3;
+  }
+
+  // An arbitrary but unique ID for the resource.
+  optional string id = 1;
+
+  // Has no semantics, but is convenient to have around.
+  optional string name = 2;
+
+  // Uri of the VPN tunnel.
+  optional string uri = 5;
+
+  // IP address of the peer VPN gateway. Only IPv4 is supported.
+  optional uint32 peer_ip = 3;
+
+  // The id of the local VPN gateway that this VPN tunnel is attached to.
+  optional string vpn_gateway = 4;
+
+  // The interface of the local VPN gateway that this VPN tunnel is attached to.
+  // HA VPN has two interfaces, and classic VPN has one interface.
+  optional uint32 vpn_gateway_interface = 11;
+
+  // The routes advertised to its peer gateway. Routes can be advertised by
+  // either BGP or static configuration.
+  repeated Ipv4Range advertised_routes = 6;
+
+  // Name of a region where the VPN tunnel is configured.
+  optional string region = 7;
+
+  // Type of the routing policy.
+  optional RoutingType routing_type = 8;
+
+  // Status of VPN tunnel.
+  optional string status = 9;
+}
+
+message InstanceGroup {
+  optional string id = 1;
+  optional string name = 2;
+  optional string uri = 3;
+  optional string region = 4;
+  optional string zone = 5;
+  optional uint32 size = 6;
+  repeated NamedPort named_ports = 7;
+  repeated string instances = 8;
+  optional bool resolved = 9;
+}
+
+message NetworkEndpointGroup {
+  optional string id = 1;
+  optional string name = 2;
+  optional string uri = 3;
+  optional string zone = 4;
+  optional string network = 5;
+}
+
+message BackendService {
+  optional string id = 1;
+  optional string name = 2;
+  optional string uri = 3;
+  optional string port_name = 4;
+  repeated string backends = 6;
+  optional string health_check_uri = 8;
+}
+
+message TargetPool {
+  optional string id = 1;
+  optional string name = 2;
+  optional string uri = 3;
+  repeated string instances = 4;
+  optional string health_check_uri = 6;
+}
+
+message TargetInstance {
+  optional string id = 1;
+  optional string name = 2;
+  optional string uri = 3;
+  optional string instance = 4;
+}
+
+message HealthCheck {
+  enum PortSpecification {
+    // Not specified.
+    UNSPECIFIED = 0;
+    USE_FIXED_PORT = 1;
+    USE_NAMED_PORT = 2;
+    USE_SERVING_PORT = 3;
+  }
+  optional string id = 1;
+  optional string name = 2;
+  optional string uri = 3;
+  optional uint32 port = 4;
+  optional string port_name = 5;
+  optional PortSpecification port_specification = 6;
+}
+
+message UrlMap {
+  optional string id = 1;
+  optional string name = 2;
+  optional string uri = 3;
+  optional string default_service = 4;
+}
+
+message LoadBalancerProxies {
+  optional string id = 1;
+  optional string name = 2;
+  optional string uri = 3;
+  oneof backend {
+    string url_map = 4;
+    string backend_service = 5;
+  }
+}
+
+// Record errors in generating the network model.
+// The errors could be missing source input, or due to validation error.
+message Errors {
+  // Error due to not able to access the config.
+  repeated IngestionError ingestion_errors = 1;
+  // Error due to not able to parse the config.
+  repeated ParserError parser_errors = 2;
+}
