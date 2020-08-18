@@ -16,7 +16,7 @@
 // related configs are hit.
 syntax = "proto2";
 
-package goole.cloud.network.reachability;
+package google.cloud.network.reachability;
 
 import "google/rpc/status.proto";
 
